@@ -1,10 +1,10 @@
 package com.example.recipemate
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +83,7 @@ fun BottomNavigationBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
         NavigationBarItem(
             selected = selectedTab == 2,
             onClick = { onTabSelected(2) },
-            icon = { Icon(Icons.Default.Favorite, contentDescription = "Saved") },
+            icon = { Icon(Icons.Default.Favorite, contentDescription = "Saved Recipes") },
             label = { Text("Saved") }
         )
         NavigationBarItem(
@@ -94,76 +102,9 @@ fun BottomNavigationBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
 }
 
 @Composable
-fun HomeScreen() {
-    var recipeName by remember { mutableStateOf("") }
-    var recipeDetails by remember { mutableStateOf("") }
-    val context = LocalContext.current
-
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text("Home - Recipe Summary", style = MaterialTheme.typography.titleLarge)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Input fields for Recipe
-        TextField(
-            value = recipeName,
-            onValueChange = { recipeName = it },
-            label = { Text("Recipe Name") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextField(
-            value = recipeDetails,
-            onValueChange = { recipeDetails = it },
-            label = { Text("Recipe Details") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                if (recipeName.isNotEmpty() && recipeDetails.isNotEmpty()) {
-                    Toast.makeText(
-                        context,
-                        "Recipe \"$recipeName\" added successfully!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    Toast.makeText(context, "Fields cannot be empty!", Toast.LENGTH_SHORT).show()
-                }
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Add Recipe")
-        }
-    }
-}
-
-@Composable
 fun CategoriesScreen() {
-    val categories = listOf("Appetizers", "Main Course", "Desserts", "Beverages")
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(categories) { category ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(4.dp)
-            ) {
-                Row(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = category,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("Categories Screen", style = MaterialTheme.typography.titleLarge)
     }
 }
 
@@ -188,8 +129,116 @@ fun ProfileScreen() {
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun RecipeMateAppPreview() {
-    RecipeMateApp()
+fun HomeScreen() {
+    var searchQuery by remember { mutableStateOf("") }
+    val recipes = remember { mutableStateListOf<Map<String, String>>() }
+    val firestore = FirebaseFirestore.getInstance()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    fun fetchFromSpoonacular(query: String) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val url =
+                    "https://api.spoonacular.com/recipes/complexSearch?query=$query&apiKey=c5039dea51bc4193a92074c8f607bd2b"
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.connect()
+
+                if (connection.responseCode == 200) {
+                    val response = connection.inputStream.bufferedReader().use { it.readText() }
+                    val jsonResponse = JSONObject(response)
+                    val results = jsonResponse.getJSONArray("results")
+
+                    val fetchedRecipes = (0 until results.length()).map { i ->
+                        val recipe = results.getJSONObject(i)
+                        mapOf(
+                            "title" to recipe.optString("title"),
+                            "image" to recipe.optString("image")
+                        )
+                    }
+
+                    // Save to Firebase Firestore
+                    fetchedRecipes.forEach { recipe ->
+                        firestore.collection("recipes").add(recipe).await()
+                    }
+
+                    recipes.clear()
+                    recipes.addAll(fetchedRecipes)
+                }
+            } catch (e: Exception) {
+                Log.e("API_ERROR", "Error fetching recipes: ${e.message}")
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun loadFromFirebase() {
+        coroutineScope.launch {
+            try {
+                val snapshot = firestore.collection("recipes").get().await()
+                val fetchedRecipes = snapshot.documents.map { doc ->
+                    doc.data as Map<String, String>
+                }
+                recipes.clear()
+                recipes.addAll(fetchedRecipes)
+            } catch (e: Exception) {
+                Log.e("FIREBASE_ERROR", "Error fetching recipes from Firestore: ${e.message}")
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        TextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search Recipes") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = {
+            if (searchQuery.isNotEmpty()) {
+                fetchFromSpoonacular(searchQuery)
+            } else {
+                loadFromFirebase()
+            }
+        }) {
+            Text("Search")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(recipes) { recipe ->
+                RecipeCard(recipe)
+            }
+        }
+    }
+}
+
+@Composable
+fun RecipeCard(recipe: Map<String, String>) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Row(modifier = Modifier.padding(16.dp)) {
+            AsyncImage(
+                model = recipe["image"],
+                contentDescription = recipe["title"],
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(recipe["title"] ?: "No Title", style = MaterialTheme.typography.titleMedium)
+        }
+    }
 }

@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    kotlin("plugin.serialization") version "1.8.20"
 }
 
 android {
@@ -49,6 +50,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.firebase.firestore.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -59,5 +61,28 @@ dependencies {
     implementation (libs.ui)
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.ktor.client.cio.jvm)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.gson)
+    implementation(libs.coil.compose)
+
+    // Jetpack Compose Core
+    implementation(libs.androidx.ui.v133)
+
+    // Material Design 3 (for Material3 Components)
+    implementation(libs.material3)
+
+    // Compose Runtime
+    implementation(libs.androidx.runtime)
+
+    // Compose Foundation (includes basic layout, drawing, and text functionality)
+    implementation(libs.androidx.foundation)
+
+    // Compose Material (if you want to use Material 2 components)
+    implementation(libs.androidx.material)
+
+    // Coil for image loading in Compose
+    implementation(libs.coil.compose.v222)
 
 }

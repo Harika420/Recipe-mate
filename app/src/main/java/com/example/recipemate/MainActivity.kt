@@ -22,79 +22,81 @@ import com.example.recipemate.ui.theme.RecipeMateTheme
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             RecipeMateTheme {
                 SplashScreen(onSplashComplete = {
-                    // Navigate to the main activity or another screen
+                    // Navigate to the login activity
                     startActivity(Intent(this, LoginActivity::class.java))
                     finish() // Close MainActivity so it’s removed from the back stack
                 })
             }
         }
     }
-}
 
-@Composable
-fun SplashScreen(onSplashComplete: () -> Unit) {
-    var isSplashVisible by remember { mutableStateOf(true) }
+    @Composable
+    fun SplashScreen(onSplashComplete: () -> Unit) {
+        var isSplashVisible by remember { mutableStateOf(true) }
 
-    // Delay to keep splash screen visible for 3 seconds, then call onSplashComplete
-    LaunchedEffect(Unit) {
-        delay(3000) // 3-second delay
-        isSplashVisible = false
-        onSplashComplete()
+        // Delay to keep splash screen visible for 3 seconds, then call onSplashComplete
+        LaunchedEffect(Unit) {
+            delay(3000) // 3-second delay
+            isSplashVisible = false
+            onSplashComplete()
+        }
+
+        if (isSplashVisible) {
+            SplashContent()
+        }
     }
 
-    if (isSplashVisible) {
-        SplashContent()
-    }
-}
+    @Composable
+    fun SplashContent() {
+        // Load the background image from the drawable folder
+        val background: Painter =
+            painterResource(id = R.drawable.background) // Update with your drawable
 
-@Composable
-fun SplashContent() {
-    // Load the background image from the drawable folder
-    val background: Painter = painterResource(id = R.drawable.background) // Update with your drawable
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(0.dp), // Remove any padding
-        contentAlignment = Alignment.Center
-    ) {
-        // Set the background image with content scaling and full size
-        Image(
-            painter = background,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop // Crop the image to fill the screen
-        )
-
-        // Semi-transparent overlay to decrease contrast
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.4f)) // 40% opacity black overlay
-        )
+                .padding(0.dp), // Remove any padding
+            contentAlignment = Alignment.Center
+        ) {
+            // Set the background image with content scaling and full size
+            Image(
+                painter = background,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop // Crop the image to fill the screen
+            )
 
-        // Logo Image
-        Image(
-            painter = painterResource(id = R.drawable.logo), // Replace with your logo's resource ID
-            contentDescription = "Logo",
-            modifier = Modifier
-                .size(300.dp) // Set desired size for the logo
-                .padding(bottom = 20.dp),
-            contentScale = ContentScale.Fit // Scale the logo proportionally
-        )
+            // Semi-transparent overlay to decrease contrast
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)) // 40% opacity black overlay
+            )
+
+            // Logo Image
+            Image(
+                painter = painterResource(id = R.drawable.logo), // Replace with your logo's resource ID
+                contentDescription = "Logo",
+                modifier = Modifier
+                    .size(300.dp) // Set desired size for the logo
+                    .padding(bottom = 20.dp),
+                contentScale = ContentScale.Fit // Scale the logo proportionally
+            )
+        }
     }
-}
 
-@Preview(showBackground = true)
-@Composable
-fun SplashScreenPreview() {
-    RecipeMateTheme {
-        SplashContent()
+    @Preview(showBackground = true)
+    @Composable
+    fun SplashScreenPreview() {
+        RecipeMateTheme {
+            SplashContent()
+        }
     }
 }
