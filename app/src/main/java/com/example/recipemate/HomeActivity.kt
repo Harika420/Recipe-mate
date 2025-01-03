@@ -539,8 +539,10 @@ fun ProfileScreen() {
     val firestore = FirebaseFirestore.getInstance()
     val context = LocalContext.current
     var userName by remember { mutableStateOf<String?>(null) }
+    var email by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
+    // Fetch user details from Firestore
     LaunchedEffect(Unit) {
         val userId = auth.currentUser?.uid
         if (userId != null) {
@@ -548,6 +550,7 @@ fun ProfileScreen() {
                 .get()
                 .addOnSuccessListener { document ->
                     userName = document.getString("userName")
+                    email = document.getString("email")
                     isLoading = false
                 }
                 .addOnFailureListener { exception ->
@@ -560,14 +563,124 @@ fun ProfileScreen() {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
         if (isLoading) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else {
-            Text(text = "Hello, ${userName ?: "User"}!", style = MaterialTheme.typography.titleLarge)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Profile Info Section
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(text = "Hello, ${userName ?: "User"}!", style = MaterialTheme.typography.titleLarge)
+                            Text(text = email ?: "No email available", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                // About the App Section
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showAboutDialog(context) },
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = "About App")
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(text = "About the App", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+
+                // Privacy Policy Section
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showPrivacyPolicy(context) },
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.PrivacyTip, contentDescription = "Privacy Policy")
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(text = "Privacy Policy", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+
+                // GDPR Compliance Section
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showGDPRCompliance(context) },
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Security, contentDescription = "GDPR Compliance")
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(text = "GDPR Compliance", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+
+                // Sign Out Section
+                item {
+                    Button(
+                        onClick = {
+                            auth.signOut()
+                            Toast.makeText(context, "Signed out successfully", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Sign Out")
+                    }
+                }
+            }
         }
     }
 }
+
+// Function to show About Dialog
+fun showAboutDialog(context: android.content.Context) {
+    Toast.makeText(context, "RecipeMate: Your personal recipe manager!", Toast.LENGTH_LONG).show()
+}
+
+// Function to show Privacy Policy
+fun showPrivacyPolicy(context: android.content.Context) {
+    Toast.makeText(context, "Privacy Policy: We respect your privacy.", Toast.LENGTH_LONG).show()
+}
+
+// Function to show GDPR Compliance info
+fun showGDPRCompliance(context: android.content.Context) {
+    Toast.makeText(context, "GDPR Compliance: We comply with GDPR regulations.", Toast.LENGTH_LONG).show()
+}
+
 
 
 @Composable
