@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,6 +46,7 @@ class HomeActivity : ComponentActivity() {
 fun RecipeMateApp() {
     var selectedTab by remember { mutableStateOf(0) }
     var selectedRecipe by remember { mutableStateOf<Map<String, String>?>(null) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -53,7 +55,7 @@ fun RecipeMateApp() {
             )
         },
         bottomBar = {
-            if (selectedRecipe == null) { // Hide bottom bar on details screen
+            if (selectedRecipe == null && selectedCategory == null) { // Hide bottom bar on details or category screen
                 BottomNavigationBar(
                     selectedTab = selectedTab,
                     onTabSelected = { index -> selectedTab = index }
@@ -76,27 +78,45 @@ fun RecipeMateApp() {
 
             // Foreground content
             Box(modifier = Modifier.fillMaxSize()) {
-                if (selectedRecipe != null) {
-                    RecipeDetailsScreen(recipe = selectedRecipe) {
-                        selectedRecipe = null // Navigate back to main screen
+                when {
+                    selectedRecipe != null -> {
+                        RecipeDetailsScreen(recipe = selectedRecipe) {
+                            selectedRecipe = null // Navigate back to main screen
+                        }
                     }
-                } else {
-                    when (selectedTab) {
-                        0 -> HomeScreen { recipe ->
-                            selectedRecipe = recipe // Navigate to details screen
+                    selectedCategory != null -> {
+                        CategoryRecipesScreen(
+                            category = selectedCategory!!,
+                            onRecipeClick = { recipe ->
+                                selectedRecipe = recipe // Navigate to details screen
+                            },
+                            onBack = {
+                                selectedCategory = null // Navigate back to main screen
+                            }
+                        )
+                    }
+                    else -> {
+                        when (selectedTab) {
+                            0 -> HomeScreen { recipe ->
+                                selectedRecipe = recipe // Navigate to details screen
+                            }
+                            1 -> CategoriesScreen { category ->
+                                selectedCategory = category // Navigate to category screen
+                            }
+                            2 -> SavedRecipesScreen { recipe ->
+                                selectedRecipe = recipe // Navigate to details screen
+                            }
+                            3 -> ShoppingListScreen()
+                            4 -> ProfileScreen()
                         }
-                        1 -> CategoriesScreen()
-                        2 -> SavedRecipesScreen { recipe ->
-                            selectedRecipe = recipe // Navigate to details screen
-                        }
-                        3 -> ShoppingListScreen()
-                        4 -> ProfileScreen()
                     }
                 }
             }
         }
     }
 }
+
+
 
 
 
@@ -137,11 +157,151 @@ fun BottomNavigationBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
 }
 
 @Composable
-fun CategoriesScreen() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Categories Screen", style = MaterialTheme.typography.titleLarge)
+fun CategoriesScreen(onCategoryClick: (String) -> Unit) {
+    val categories = listOf("Appetizer", "Dessert", "Main Course", "Salad", "Soup", "Beverage")
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background image
+        Image(
+            painter = painterResource(id = R.drawable.background),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Foreground content
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(categories) { category ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCategoryClick(category) },
+                    elevation = CardDefaults.cardElevation(4.dp)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = category,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+            }
+        }
     }
 }
+
+@Composable
+fun CategoryRecipesScreen(
+    category: String,
+    onRecipeClick: (Map<String, String>) -> Unit,
+    onBack: () -> Unit
+) {
+    val recipes = remember { mutableStateListOf<Map<String, String>>() }
+    var isLoading by remember { mutableStateOf(false) }
+    var isError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val firestore = FirebaseFirestore.getInstance()
+
+    fun fetchRecipesByCategory(category: String) {
+        coroutineScope.launch(Dispatchers.IO) {
+            isLoading = true
+            isError = false
+            try {
+                val url =
+                    "https://api.spoonacular.com/recipes/complexSearch?type=${category.lowercase()}&apiKey=c5039dea51bc4193a92074c8f607bd2b"
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.connect()
+
+                if (connection.responseCode == 200) {
+                    val response = connection.inputStream.bufferedReader().use { it.readText() }
+                    val jsonResponse = JSONObject(response)
+                    val results = jsonResponse.getJSONArray("results")
+
+                    val fetchedRecipes = (0 until results.length()).map { i ->
+                        val recipe = results.getJSONObject(i)
+                        mapOf(
+                            "title" to recipe.optString("title"),
+                            "image" to recipe.optString("image"),
+                            "id" to recipe.optString("id")
+                        )
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        recipes.clear()
+                        recipes.addAll(fetchedRecipes)
+                        if (recipes.isEmpty()) isError = true // Set error if no recipes found
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        isError = true
+                        Toast.makeText(context, "Failed to fetch recipes", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("API_ERROR", "Error fetching recipes by category: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    isError = true
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // Fetch recipes when the screen is first displayed
+    LaunchedEffect(category) {
+        fetchRecipesByCategory(category)
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background image
+        Image(
+            painter = painterResource(id = R.drawable.background),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Foreground content
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            // Back button
+            Button(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+                Text("Back")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            } else if (isError) {
+                Text(
+                    text = "No recipes found for \"$category\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(recipes) { recipe ->
+                        RecipeCard(recipe, onClick = { onRecipeClick(it) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 
 @Composable
 fun SavedRecipesScreen(onRecipeClick: (Map<String, String>) -> Unit) {
@@ -219,17 +379,196 @@ fun SavedRecipesScreen(onRecipeClick: (Map<String, String>) -> Unit) {
 
 @Composable
 fun ShoppingListScreen() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Shopping List Screen", style = MaterialTheme.typography.titleLarge)
+    val shoppingItems = remember { mutableStateListOf<String>() }
+    val firestore = FirebaseFirestore.getInstance()
+    var newItem by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(true) }
+    var isError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Load shopping items when the screen is first displayed
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            try {
+                val snapshot = firestore.collection("shopping_list").get().await()
+                val fetchedItems = snapshot.documents.mapNotNull { it.getString("item") }
+                shoppingItems.clear()
+                shoppingItems.addAll(fetchedItems)
+                isError = false
+            } catch (e: Exception) {
+                Log.e("FIREBASE_ERROR", "Error fetching shopping list: ${e.message}")
+                isError = true
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // UI for Shopping List Screen
+    Box(modifier = Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(id = R.drawable.background),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Text(
+                text = "Shopping List",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextField(
+                    value = newItem,
+                    onValueChange = { newItem = it },
+                    label = { Text("New Item") },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = {
+                    if (newItem.isNotBlank()) {
+                        coroutineScope.launch {
+                            try {
+                                firestore.collection("shopping_list").add(mapOf("item" to newItem)).await()
+                                shoppingItems.add(newItem)
+                                newItem = ""
+                                Toast.makeText(context, "Item added", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Log.e("FIREBASE_ERROR", "Error adding item: ${e.message}")
+                                Toast.makeText(context, "Failed to add item", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }) {
+                    Text("Add")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            } else if (isError) {
+                Text(
+                    text = "Failed to load shopping list.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else if (shoppingItems.isEmpty()) {
+                Text(
+                    text = "No items in the shopping list.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(shoppingItems) { item ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    coroutineScope.launch {
+                                        try {
+                                            val snapshot = firestore.collection("shopping_list")
+                                                .whereEqualTo("item", item)
+                                                .get()
+                                                .await()
+                                            for (doc in snapshot.documents) {
+                                                firestore.collection("shopping_list").document(doc.id).delete().await()
+                                            }
+                                            shoppingItems.remove(item)
+                                            Toast.makeText(context, "Item removed", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.e("FIREBASE_ERROR", "Error removing item: ${e.message}")
+                                            Toast.makeText(context, "Failed to remove item", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                            elevation = CardDefaults.cardElevation(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = item, style = MaterialTheme.typography.bodyLarge)
+                                IconButton(onClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            val snapshot = firestore.collection("shopping_list")
+                                                .whereEqualTo("item", item)
+                                                .get()
+                                                .await()
+                                            for (doc in snapshot.documents) {
+                                                firestore.collection("shopping_list").document(doc.id).delete().await()
+                                            }
+                                            shoppingItems.remove(item)
+                                            Toast.makeText(context, "Item removed", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.e("FIREBASE_ERROR", "Error removing item: ${e.message}")
+                                            Toast.makeText(context, "Failed to remove item", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete Item")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
+
+
+
 @Composable
 fun ProfileScreen() {
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+    val context = LocalContext.current
+    var userName by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        val userId = auth.currentUser?.uid
+        if (userId != null) {
+            firestore.collection("users").document(userId)
+                .get()
+                .addOnSuccessListener { document ->
+                    userName = document.getString("userName")
+                    isLoading = false
+                }
+                .addOnFailureListener { exception ->
+                    Toast.makeText(context, "Failed to load profile: ${exception.message}", Toast.LENGTH_SHORT).show()
+                    isLoading = false
+                }
+        } else {
+            Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
+            isLoading = false
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Profile Screen", style = MaterialTheme.typography.titleLarge)
+        if (isLoading) {
+            CircularProgressIndicator()
+        } else {
+            Text(text = "Hello, ${userName ?: "User"}!", style = MaterialTheme.typography.titleLarge)
+        }
     }
 }
+
 
 @Composable
 fun HomeScreen(onRecipeClick: (Map<String, String>) -> Unit) {

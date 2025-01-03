@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">RecipeMate</string>
+    <string name="default_web_client_id">http://563678473910-9nc32196k30laf69u9a8fdh2lhbckb95.apps.googleusercontent.com</string>
 </resources>

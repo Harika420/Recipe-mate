@@ -12,7 +12,20 @@
           "package_name": "com.example.recipemate"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "563678473910-cpujqgk2jgphgkg83i0qvhar1he7dc1r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.recipemate",
+            "certificate_hash": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+          }
+        },
+        {
+          "client_id": "563678473910-9nc32196k30laf69u9a8fdh2lhbckb95.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBNeK1V-yCKUSx8BsRZ738dYDwkCNI1pr0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "563678473910-9nc32196k30laf69u9a8fdh2lhbckb95.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

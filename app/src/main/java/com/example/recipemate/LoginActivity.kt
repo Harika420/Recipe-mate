@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -25,11 +26,17 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.recipemate.ui.theme.RecipeMateTheme
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize Firebase
+        FirebaseApp.initializeApp(this)
+
         setContent {
             RecipeMateTheme {
                 LoginScreen(
@@ -56,6 +63,7 @@ class LoginActivity : ComponentActivity() {
     }
 }
 
+
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
@@ -66,14 +74,17 @@ fun LoginScreen(
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var isPasswordVisible by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val auth = FirebaseAuth.getInstance()
 
     // Load the background image and logo
     val background = painterResource(id = R.drawable.background)
-    val logo = painterResource(id = R.drawable.logo) // Replace with your logo resource ID
+    val logo = painterResource(id = R.drawable.logo)
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
         // Background Image
         Image(
@@ -83,14 +94,13 @@ fun LoginScreen(
             contentScale = ContentScale.Crop
         )
 
-        // Semi-transparent overlay to improve text readability
+        // Semi-transparent overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.4f))
         )
 
-        // Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -103,8 +113,8 @@ fun LoginScreen(
                 painter = logo,
                 contentDescription = "Logo",
                 modifier = Modifier
-                    .size(150.dp) // Adjust size as needed
-                    .padding(bottom = 32.dp), // Space between logo and fields
+                    .size(150.dp)
+                    .padding(bottom = 32.dp),
                 contentScale = ContentScale.Fit
             )
 
@@ -113,7 +123,7 @@ fun LoginScreen(
                 value = email,
                 onValueChange = {
                     email = it
-                    emailError = null // Clear error when user modifies input
+                    emailError = null
                 },
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
@@ -129,7 +139,7 @@ fun LoginScreen(
                 value = password,
                 onValueChange = {
                     password = it
-                    passwordError = null // Clear error when user modifies input
+                    passwordError = null
                 },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
@@ -152,12 +162,37 @@ fun LoginScreen(
             // Login Button
             Button(
                 onClick = {
-                    // Regardless of email and password validity, show the login successful message
-                    onLoginSuccess() // This will trigger the navigation to HomeActivity
+                    if (email.isBlank()) {
+                        emailError = "Email cannot be empty"
+                        return@Button
+                    }
+                    if (password.isBlank()) {
+                        passwordError = "Password cannot be empty"
+                        return@Button
+                    }
+
+                    isLoading = true
+
+                    // Firebase Authentication
+                    auth.signInWithEmailAndPassword(email, password)
+                        .addOnCompleteListener { task ->
+                            isLoading = false
+                            if (task.isSuccessful) {
+                                Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
+                                onLoginSuccess()
+                            } else {
+                                Toast.makeText(context, "Login failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
             ) {
-                Text("Continue")
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                } else {
+                    Text("Continue")
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -172,6 +207,7 @@ fun LoginScreen(
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
