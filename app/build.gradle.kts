@@ -1,8 +1,10 @@
 plugins {
-    alias(libs.plugins.android.application)
+
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     kotlin("plugin.serialization") version "1.8.20"
+    id("com.android.application")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -84,5 +86,8 @@ dependencies {
 
     // Coil for image loading in Compose
     implementation(libs.coil.compose.v222)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
 
 }
