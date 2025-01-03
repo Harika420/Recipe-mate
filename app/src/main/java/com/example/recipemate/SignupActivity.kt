@@ -49,7 +49,6 @@ class SignupActivity : ComponentActivity() {
         }
     }
 
-
     @Composable
     fun SignupScreen(onSignupSuccess: () -> Unit) {
         val auth = FirebaseAuth.getInstance()
@@ -60,8 +59,16 @@ class SignupActivity : ComponentActivity() {
         var password by remember { mutableStateOf("") }
         var username by remember { mutableStateOf("") }
         var isLoading by remember { mutableStateOf(false) }
+        var isConsentGiven by remember { mutableStateOf(false) }
+        var showConsentError by remember { mutableStateOf(false) }
 
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
@@ -73,68 +80,95 @@ class SignupActivity : ComponentActivity() {
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Email") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
 
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = PasswordVisualTransformation()
             )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = isConsentGiven,
+                    onCheckedChange = { isConsentGiven = it }
+                )
+                Text("I agree to the Privacy Policy")
+            }
+
+            if (showConsentError) {
+                Text(
+                    text = "You must agree to the Privacy Policy",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+            }
 
             Button(
                 onClick = {
                     if (username.isNotBlank() && email.isNotBlank() && password.isNotBlank()) {
-                        isLoading = true
-                        auth.createUserWithEmailAndPassword(email, password)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    val userId = auth.currentUser?.uid
-                                    if (userId != null) {
-                                        val userMap = mapOf(
-                                            "userName" to username,
-                                            "email" to email
-                                        )
-                                        firestore.collection("users").document(userId)
-                                            .set(userMap)
-                                            .addOnSuccessListener {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Signup Successful!",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                onSignupSuccess()
-                                            }
-                                            .addOnFailureListener { e ->
-                                                Toast.makeText(
-                                                    context,
-                                                    "Failed to save user: ${e.message}",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
+                        if (!isConsentGiven) {
+                            showConsentError = true
+                        } else {
+                            showConsentError = false
+                            isLoading = true
+                            auth.createUserWithEmailAndPassword(email, password)
+                                .addOnCompleteListener { task ->
+                                    if (task.isSuccessful) {
+                                        val userId = auth.currentUser?.uid
+                                        if (userId != null) {
+                                            val userMap = mapOf(
+                                                "userName" to username,
+                                                "email" to email
+                                            )
+                                            firestore.collection("users").document(userId)
+                                                .set(userMap)
+                                                .addOnSuccessListener {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Signup Successful!",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    onSignupSuccess()
+                                                }
+                                                .addOnFailureListener { e ->
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Failed to save user: ${e.message}",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                        }
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Signup Failed: ${task.exception?.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        "Signup Failed: ${task.exception?.message}",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    isLoading = false
                                 }
-                                isLoading = false
-                            }
+                        }
                     } else {
                         Toast.makeText(context, "All fields are required", Toast.LENGTH_SHORT)
                             .show()
                     }
                 },
-                enabled = !isLoading
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (isLoading) "Signing Up..." else "Sign Up")
             }
         }
     }
-
 
     // Utility function to validate email
     fun isValidEmail(email: String): Boolean {
@@ -144,3 +178,4 @@ class SignupActivity : ComponentActivity() {
         return emailPattern.matcher(email).matches()
     }
 }
+

@@ -47,67 +47,73 @@ fun RecipeMateApp() {
     var selectedTab by remember { mutableStateOf(0) }
     var selectedRecipe by remember { mutableStateOf<Map<String, String>?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var isSignedOut by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("RecipeMate") }
-            )
-        },
-        bottomBar = {
-            if (selectedRecipe == null && selectedCategory == null) { // Hide bottom bar on details or category screen
-                BottomNavigationBar(
-                    selectedTab = selectedTab,
-                    onTabSelected = { index -> selectedTab = index }
+    if (isSignedOut) {
+        // Navigate to Login Screen (replace this with actual navigation logic)
+        LoginScreen(onLoginSuccess = { isSignedOut = false }, onSignup = { /* Navigate to Signup */ })
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("RecipeMate") }
                 )
+            },
+            bottomBar = {
+                if (selectedRecipe == null && selectedCategory == null) { // Hide bottom bar on details or category screen
+                    BottomNavigationBar(
+                        selectedTab = selectedTab,
+                        onTabSelected = { index -> selectedTab = index }
+                    )
+                }
             }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-        ) {
-            // Background image
-            Image(
-                painter = painterResource(id = R.drawable.background),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
+            ) {
+                // Background image
+                Image(
+                    painter = painterResource(id = R.drawable.background),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
 
-            // Foreground content
-            Box(modifier = Modifier.fillMaxSize()) {
-                when {
-                    selectedRecipe != null -> {
-                        RecipeDetailsScreen(recipe = selectedRecipe) {
-                            selectedRecipe = null // Navigate back to main screen
+                // Foreground content
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        selectedRecipe != null -> {
+                            RecipeDetailsScreen(recipe = selectedRecipe) {
+                                selectedRecipe = null // Navigate back to main screen
+                            }
                         }
-                    }
-                    selectedCategory != null -> {
-                        CategoryRecipesScreen(
-                            category = selectedCategory!!,
-                            onRecipeClick = { recipe ->
-                                selectedRecipe = recipe // Navigate to details screen
-                            },
-                            onBack = {
-                                selectedCategory = null // Navigate back to main screen
+                        selectedCategory != null -> {
+                            CategoryRecipesScreen(
+                                category = selectedCategory!!,
+                                onRecipeClick = { recipe ->
+                                    selectedRecipe = recipe // Navigate to details screen
+                                },
+                                onBack = {
+                                    selectedCategory = null // Navigate back to main screen
+                                }
+                            )
+                        }
+                        else -> {
+                            when (selectedTab) {
+                                0 -> HomeScreen { recipe ->
+                                    selectedRecipe = recipe // Navigate to details screen
+                                }
+                                1 -> CategoriesScreen { category ->
+                                    selectedCategory = category // Navigate to category screen
+                                }
+                                2 -> SavedRecipesScreen { recipe ->
+                                    selectedRecipe = recipe // Navigate to details screen
+                                }
+                                3 -> ShoppingListScreen()
+                                4 -> ProfileScreen(onSignOut = { isSignedOut = true })
                             }
-                        )
-                    }
-                    else -> {
-                        when (selectedTab) {
-                            0 -> HomeScreen { recipe ->
-                                selectedRecipe = recipe // Navigate to details screen
-                            }
-                            1 -> CategoriesScreen { category ->
-                                selectedCategory = category // Navigate to category screen
-                            }
-                            2 -> SavedRecipesScreen { recipe ->
-                                selectedRecipe = recipe // Navigate to details screen
-                            }
-                            3 -> ShoppingListScreen()
-                            4 -> ProfileScreen()
                         }
                     }
                 }
@@ -115,6 +121,7 @@ fun RecipeMateApp() {
         }
     }
 }
+
 
 
 
@@ -534,13 +541,18 @@ fun ShoppingListScreen() {
 
 
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(onSignOut: () -> Unit) {
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
     val context = LocalContext.current
     var userName by remember { mutableStateOf<String?>(null) }
     var email by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var showDialog by remember { mutableStateOf<DialogType?>(null) }
+
+    // GDPR Consent state
+    var isConsentGiven by remember { mutableStateOf(false) }
+    var showConsentDialog by remember { mutableStateOf(false) }
 
     // Fetch user details from Firestore
     LaunchedEffect(Unit) {
@@ -551,6 +563,7 @@ fun ProfileScreen() {
                 .addOnSuccessListener { document ->
                     userName = document.getString("userName")
                     email = document.getString("email")
+                    isConsentGiven = document.getBoolean("gdprConsent") ?: false
                     isLoading = false
                 }
                 .addOnFailureListener { exception ->
@@ -596,7 +609,7 @@ fun ProfileScreen() {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showAboutDialog(context) },
+                            .clickable { showDialog = DialogType.ABOUT },
                         elevation = CardDefaults.cardElevation(4.dp)
                     ) {
                         Row(
@@ -615,7 +628,7 @@ fun ProfileScreen() {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showPrivacyPolicy(context) },
+                            .clickable { showDialog = DialogType.PRIVACY_POLICY },
                         elevation = CardDefaults.cardElevation(4.dp)
                     ) {
                         Row(
@@ -629,21 +642,24 @@ fun ProfileScreen() {
                     }
                 }
 
-                // GDPR Compliance Section
+                // GDPR Consent Section
                 item {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showGDPRCompliance(context) },
+                            .clickable { showConsentDialog = true },
                         elevation = CardDefaults.cardElevation(4.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Security, contentDescription = "GDPR Compliance")
+                            Icon(Icons.Default.Security, contentDescription = "GDPR Consent")
                             Spacer(modifier = Modifier.width(16.dp))
-                            Text(text = "GDPR Compliance", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = if (isConsentGiven) "GDPR Consent Given" else "GDPR Consent Required",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
                         }
                     }
                 }
@@ -654,6 +670,7 @@ fun ProfileScreen() {
                         onClick = {
                             auth.signOut()
                             Toast.makeText(context, "Signed out successfully", Toast.LENGTH_SHORT).show()
+                            onSignOut() // Navigate back to login screen
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)
@@ -663,8 +680,71 @@ fun ProfileScreen() {
                 }
             }
         }
+
+        // Show Dialogs for About, Privacy Policy, and GDPR Consent
+        showDialog?.let { dialogType ->
+            AlertDialog(
+                onDismissRequest = { showDialog = null },
+                title = { Text(text = if (dialogType == DialogType.ABOUT) "About the App" else "Privacy Policy") },
+                text = {
+                    Text(
+                        text = when (dialogType) {
+                            DialogType.ABOUT -> "RecipeMate is your personal recipe manager. Explore, save, and share recipes effortlessly."
+                            DialogType.PRIVACY_POLICY -> "We value your privacy. RecipeMate ensures that your data is secure and compliant with privacy regulations."
+                        }
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = { showDialog = null }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+
+        if (showConsentDialog) {
+            AlertDialog(
+                onDismissRequest = { showConsentDialog = false },
+                title = { Text("GDPR Consent") },
+                text = {
+                    Text(
+                        "To continue using RecipeMate, you need to give your consent for us to store and process your personal data in compliance with GDPR regulations."
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        // Save consent in Firestore
+                        val userId = auth.currentUser?.uid
+                        if (userId != null) {
+                            firestore.collection("users").document(userId)
+                                .update("gdprConsent", true)
+                                .addOnSuccessListener {
+                                    Toast.makeText(context, "Consent Given", Toast.LENGTH_SHORT).show()
+                                    isConsentGiven = true
+                                    showConsentDialog = false
+                                }
+                                .addOnFailureListener {
+                                    Toast.makeText(context, "Failed to save consent", Toast.LENGTH_SHORT).show()
+                                }
+                        }
+                    }) {
+                        Text("Give Consent")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showConsentDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
+
+enum class DialogType { ABOUT, PRIVACY_POLICY }
+
+
+
 
 // Function to show About Dialog
 fun showAboutDialog(context: android.content.Context) {
